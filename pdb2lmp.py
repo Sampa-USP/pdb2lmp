@@ -13,6 +13,7 @@ import os
 import openbabel
 import pybel
 import numpy as np
+import math
 from ase import Atom, Atoms
 from ase.io import write
 from scipy.spatial import cKDTree
@@ -110,6 +111,51 @@ def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds):
     else:
       outAtoms += "\t%d\t1\t%d\tX.XXXXXX\t%.4f\t%.4f\t%.4f\t# %s\n" % (i+1, massTypes[idToAtomicLabel[i]], atom.GetX(), atom.GetY(), atom.GetZ(), idToAtomicLabel[i])
 
+  # define box shape and size
+  try:
+    fromBounds = False
+    rcell = mol.GetData(12)
+    cell = openbabel.toUnitCell(rcell)
+    v1 = [cell.GetCellVectors()[0].GetX(), cell.GetCellVectors()[0].GetY(), cell.GetCellVectors()[0].GetZ()]
+    v2 = [cell.GetCellVectors()[1].GetX(), cell.GetCellVectors()[1].GetY(), cell.GetCellVectors()[1].GetZ()]
+    v3 = [cell.GetCellVectors()[2].GetX(), cell.GetCellVectors()[2].GetY(), cell.GetCellVectors()[2].GetZ()]
+    boxinfo = [v1,v2,v3]
+    orthogonal = True
+    for i, array in enumerate(boxinfo):
+      for j in range(3):
+        if i == j:
+          continue
+        if not math.isclose(0., array[j], abs_tol=1e-6):
+          orthogonal = False
+  except:
+    fromBounds = True
+    v1 = [xmax - xmin, 0., 0.]
+    v2 = [0., ymax - ymin, 0.]
+    v3 = [0., 0., zmax - zmin]
+    orthogonal = True
+
+  # add buffer
+  if orthogonal:
+    buf = []
+    boxinfo = [v1,v2,v3]
+    for i, val in enumerate(boxinfo[repaxis]):
+      if i == repaxis:
+        buf.append(val+buffa)
+      else:
+        buf.append(val)
+    boxinfo[repaxis] = buf
+    for i in range(3):
+      if i == repaxis:
+        continue
+      buf = []
+      for j, val in enumerate(boxinfo[i]):
+        if j == i:
+          buf.append(val+buffo)
+        else:
+          buf.append(val)
+      boxinfo[i] = buf
+
+  # print(boxinfo)
 
   # Duplicate to get the bonds in the PBC. Taken from (method _crd2bond):
   # https://github.com/tongzhugroup/mddatasetbuilder/blob/66eb0f15e972be0f5534dcda27af253cd8891ff2/mddatasetbuilder/detect.py#L213
@@ -120,11 +166,11 @@ def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds):
       if i == repaxis:
         continue
       boxsize[i] = boxsize[i]+buffo
-    acoords = Atoms(acoords, cell=boxsize, pbc=True)
+    acoords = Atoms(acoords, cell=boxinfo, pbc=True)
     repatoms = acoords.repeat(2)[natoms:] # repeat the unit cell in each direction (len(repatoms) = 7*natoms)
     tree = cKDTree(acoords.get_positions())
     d = tree.query(repatoms.get_positions(), k=1)[0]
-    nearest = d < 6.
+    nearest = d < 8.
     ghost_atoms = repatoms[nearest]
     realnumber = np.where(nearest)[0] % natoms
     acoords += ghost_atoms
@@ -237,13 +283,19 @@ def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds):
   # print header
   header = "LAMMPS topology created from %s using create_data_lmp.py - By Henrique Musseli Cezar, 2020\n\n\t%d atoms\n\t%d bonds\n\t%d angles\n\n\t%d atom types\n\t%d bond types\n\t%d angle types\n\n" % (fname, natoms, nbonds, nangles, nmassTypes, nbondTypes, nangleTypes)
   # add box info
-  boxsize = [(xmin,xmax),(ymin,ymax),(zmin,zmax)]
-  boxsize[repaxis] = (boxsize[repaxis][0]-buffa/2., boxsize[repaxis][1]+buffa/2.)
-  for i in range(3):
-    if i == repaxis:
-      continue
-    boxsize[i] = (boxsize[i][0]-buffo/2., boxsize[i][1]+buffo/2.)
-  header += "\t%.8f\t%.8f\t xlo xhi\n\t%.8f\t%.8f\t ylo yhi\n\t%.8f\t%.8f\t zlo zhi\n" % (boxsize[0][0], boxsize[0][1], boxsize[1][0], boxsize[1][1], boxsize[2][0], boxsize[2][1])
+  if fromBounds:
+    boxsize = [(xmin,xmax),(ymin,ymax),(zmin,zmax)]
+    boxsize[repaxis] = (boxsize[repaxis][0]-buffa/2., boxsize[repaxis][1]+buffa/2.)
+    for i in range(3):
+      if i == repaxis:
+        continue
+      boxsize[i] = (boxsize[i][0]-buffo/2., boxsize[i][1]+buffo/2.)
+    header += "\t%.8f\t%.8f\t xlo xhi\n\t%.8f\t%.8f\t ylo yhi\n\t%.8f\t%.8f\t zlo zhi\n" % (boxsize[0][0], boxsize[0][1], boxsize[1][0], boxsize[1][1], boxsize[2][0], boxsize[2][1])
+  else:
+    if orthogonal:
+      header += "\t%.8f\t%.8f\t xlo xhi\n\t%.8f\t%.8f\t ylo yhi\n\t%.8f\t%.8f\t zlo zhi\n" % (0., boxinfo[0][0], 0., boxinfo[1][1], 0., boxinfo[2][2])
+    else:
+      header += "\t%.8f\t%.8f\t xlo xhi\n\t%.8f\t%.8f\t ylo yhi\n\t%.8f\t%.8f\t zlo zhi\n\t%.8f\t%.8f\t%.8f\t xy xz yz\n" % (0., boxinfo[0][0], 0., boxinfo[1][1], 0., boxinfo[2][2], boxinfo[1][0], boxinfo[2][0], boxinfo[2][1])
 
   # print Coeffs
   outCoeffs = "Pair Coeffs\n\n"
@@ -269,8 +321,8 @@ if __name__ == '__main__':
   parser.add_argument("pdbfile", type=extant_file, help="path to the .pdb file")
   parser.add_argument("--charges", type=extant_file, help="path to a file associating PDB label to atomic charge (one pair per line)")
   parser.add_argument("--axis", default="y", help="axis to replicate and check for bonds and angles in the PBC (default: y)")
-  parser.add_argument("--buffer-length-axis", type=float, help="length of the extra space in the replicated axis for PBC (default: 1.0)", default=1.)
-  parser.add_argument("--buffer-length-orthogonal", type=float, help="length of size orthogonal to the axis with PBC (default: 30.0)", default=30.)
+  parser.add_argument("--buffer-length-axis", type=float, help="length of the extra space in the replicated axis for PBC (default: 1.0 - NOT considered for non orthogonal cell)", default=1.)
+  parser.add_argument("--buffer-length-orthogonal", type=float, help="length of size orthogonal to the axis with PBC (default: 30.0 - NOT considered for non orthogonal cell)", default=30.)
   parser.add_argument("--pbc-bonds", action="store_true", help="look for bonds and angles in the pbc images?",)
 
   args = parser.parse_args()
