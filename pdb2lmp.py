@@ -160,12 +160,6 @@ def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds):
   # Duplicate to get the bonds in the PBC. Taken from (method _crd2bond):
   # https://github.com/tongzhugroup/mddatasetbuilder/blob/66eb0f15e972be0f5534dcda27af253cd8891ff2/mddatasetbuilder/detect.py#L213
   if pbcbonds:
-    boxsize = [(xmax - xmin), (ymax - ymin), (zmax - zmin)]
-    boxsize[repaxis] = boxsize[repaxis]+buffa
-    for i in range(3):
-      if i == repaxis:
-        continue
-      boxsize[i] = boxsize[i]+buffo
     acoords = Atoms(acoords, cell=boxinfo, pbc=True)
     repatoms = acoords.repeat(2)[natoms:] # repeat the unit cell in each direction (len(repatoms) = 7*natoms)
     tree = cKDTree(acoords.get_positions())
