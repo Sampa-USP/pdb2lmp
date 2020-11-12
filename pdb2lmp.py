@@ -348,7 +348,7 @@ if __name__ == '__main__':
   parser = argparse.ArgumentParser(description="Receives a .pdb and generate a LAMMPS data file with atoms, bonds and angles.")
   parser.add_argument("pdbfile", type=extant_file, help="path to the .pdb file")
   parser.add_argument("--charges", type=extant_file, help="path to a file associating PDB label to atomic charge (one pair per line)")
-  parser.add_argument("--axis", default="y", help="axis to replicate and check for bonds and angles in the PBC (default: y)")
+  parser.add_argument("--axis", default="z", help="axis to replicate and check for bonds and angles in the PBC (default: z)")
   parser.add_argument("--buffer-length-axis", type=float, help="length of the extra space in the replicated axis for PBC (default: 1.0 - NOT considered for non orthogonal cell)", default=1.)
   parser.add_argument("--buffer-length-orthogonal", type=float, help="length of size orthogonal to the axis with PBC (default: 30.0 - NOT considered for non orthogonal cell)", default=30.)
   parser.add_argument("--pbc-bonds", action="store_true", help="look for bonds and angles in the pbc images?",)
