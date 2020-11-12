@@ -52,11 +52,44 @@ def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds):
   mol = openbabel.OBMol()
   obConversion.ReadFile(mol, fname)
 
+  # split the molecules
+  molecules = mol.Separate()
+
+  # detect the molecules types
+  mTypes = {}
+  mapmTypes = {}
+  atomIdToMol = {}
+  nty = 0
+  for i, submol in enumerate(molecules, start=1):
+    atomiter = openbabel.OBMolAtomIter(submol)
+    atlist = []
+    for at in atomiter:
+      atlist.append(at.GetAtomicNum())
+      atomIdToMol[at.GetId()] = i
+    foundType = 0
+
+    for ty in mTypes:
+      # check if there's already a molecule of this type
+      if atlist == mTypes[ty]:
+        foundType = ty
+
+    # if not, create a new type
+    if foundType == 0:
+      nty += 1
+      foundType = nty
+      mTypes[at] = atlist
+
+    mapmTypes[i] = foundType
+
   # get atomic labels from pdb
   idToAtomicLabel = {}
   for res in openbabel.OBResidueIter(mol):
     for atom in openbabel.OBResidueAtomIter(res):
-      idToAtomicLabel[atom.GetId()] = res.GetAtomID(atom).strip()
+      if atomIdToMol[atom.GetId()] > 1:
+        idToAtomicLabel[atom.GetId()] = res.GetAtomID(atom).strip()+str(mapmTypes[atomIdToMol[atom.GetId()]])
+      else:
+        idToAtomicLabel[atom.GetId()] = res.GetAtomID(atom).strip()
+
   # print(idToAtomicLabel)
 
   # identify atom types and get masses
@@ -85,31 +118,32 @@ def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds):
   zmax = float("-inf")
   natoms = 0
   acoords = []
-  atomIterator = openbabel.OBMolAtomIter(mol)
-  for atom in atomIterator:
-    natoms += 1
-    i = atom.GetId()
-    apos = (atom.GetX(), atom.GetY(), atom.GetZ())
-    acoords.append(Atom(atom.GetAtomicNum(), apos))
+  for mnum, imol in enumerate(molecules, start=1):
+    atomIterator = openbabel.OBMolAtomIter(imol)
+    for atom in sorted(atomIterator, key=lambda x: x.GetId()):
+      natoms += 1
+      i = atom.GetId()
+      apos = (atom.GetX(), atom.GetY(), atom.GetZ())
+      acoords.append(Atom(atom.GetAtomicNum(), apos))
 
-    # look for the maximum and minimum x for the box (improve later with numpy and all coordinates)
-    if apos[0] > xmax:
-      xmax = apos[0]
-    if apos[0] < xmin:
-      xmin = apos[0]
-    if apos[1] > ymax:
-      ymax = apos[1]
-    if apos[1] < ymin:
-      ymin = apos[1]
-    if apos[2] > zmax:
-      zmax = apos[2]
-    if apos[2] < zmin:
-      zmin = apos[2]
+      # look for the maximum and minimum x for the box (improve later with numpy and all coordinates)
+      if apos[0] > xmax:
+        xmax = apos[0]
+      if apos[0] < xmin:
+        xmin = apos[0]
+      if apos[1] > ymax:
+        ymax = apos[1]
+      if apos[1] < ymin:
+        ymin = apos[1]
+      if apos[2] > zmax:
+        zmax = apos[2]
+      if apos[2] < zmin:
+        zmin = apos[2]
 
-    if fcharges:
-      outAtoms += "\t%d\t1\t%d\t%.6f\t%.4f\t%.4f\t%.4f\t# %s\n" % (i+1, massTypes[idToAtomicLabel[i]], chargesLabel[idToAtomicLabel[i]], atom.GetX(), atom.GetY(), atom.GetZ(), idToAtomicLabel[i])
-    else:
-      outAtoms += "\t%d\t1\t%d\tX.XXXXXX\t%.4f\t%.4f\t%.4f\t# %s\n" % (i+1, massTypes[idToAtomicLabel[i]], atom.GetX(), atom.GetY(), atom.GetZ(), idToAtomicLabel[i])
+      if fcharges:
+        outAtoms += "\t%d\t%d\t%d\t%.6f\t%.4f\t%.4f\t%.4f\t# %s\n" % (i+1, mnum, massTypes[idToAtomicLabel[i]], chargesLabel[idToAtomicLabel[i]], atom.GetX(), atom.GetY(), atom.GetZ(), idToAtomicLabel[i])
+      else:
+        outAtoms += "\t%d\t%d\t%d\tX.XXXXXX\t%.4f\t%.4f\t%.4f\t# %s\n" % (i+1, mnum, massTypes[idToAtomicLabel[i]], atom.GetX(), atom.GetY(), atom.GetZ(), idToAtomicLabel[i])
 
   # define box shape and size
   try:
