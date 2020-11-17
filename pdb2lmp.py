@@ -47,10 +47,14 @@ def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds):
   # set openbabel file format
   obConversion = openbabel.OBConversion()
   obConversion.SetInAndOutFormats("pdb","xyz")
+  # trick to disable ring perception and make the ReadFile waaaay faster
+  # Source: https://sourceforge.net/p/openbabel/mailman/openbabel-discuss/thread/56e1812d-396a-db7c-096d-d378a077853f%40ipcms.unistra.fr/#msg36225392
+  obConversion.AddOption("b", openbabel.OBConversion.INOPTIONS) 
 
   # read molecule to OBMol object
   mol = openbabel.OBMol()
   obConversion.ReadFile(mol, fname)
+  mol.ConnectTheDots() # necessary because of the 'b' INOPTION
 
   # split the molecules
   molecules = mol.Separate()
@@ -66,7 +70,7 @@ def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds):
     for at in atomiter:
       atlist.append(at.GetAtomicNum())
       atomIdToMol[at.GetId()] = i
-    foundType = 0
+    foundType = None
 
     for ty in mTypes:
       # check if there's already a molecule of this type
@@ -74,10 +78,10 @@ def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds):
         foundType = ty
 
     # if not, create a new type
-    if foundType == 0:
+    if not foundType:
       nty += 1
       foundType = nty
-      mTypes[at] = atlist
+      mTypes[nty] = atlist
 
     mapmTypes[i] = foundType
 
@@ -213,7 +217,7 @@ def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds):
         a.SetAtomicNum(int(num))
         a.SetVector(*position)
     nmol.ConnectTheDots()
-    nmol.PerceiveBondOrders()
+    # nmol.PerceiveBondOrders() # super slow becauses it looks for rings
     nmol.EndModify()
   else:
     nmol = mol
