@@ -271,8 +271,7 @@ def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds):
     nmol.DeleteBond(bond)
 
   # identify angle types and create angle list
-  if pbcbonds:
-    nmol.FindAngles()
+  nmol.FindAngles()
   outAngles = "Angles # harmonic\n\n"
 
   angleTypes = {}
@@ -292,6 +291,50 @@ def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds):
       a2 = realnumber[a2-natoms]
     if a3 >= natoms:
       a3 = realnumber[a3-natoms]
+
+    atype1 = "%s - %s - %s" % (idToAtomicLabel[a1],idToAtomicLabel[a2],idToAtomicLabel[a3])
+    atype2 = "%s - %s - %s" % (idToAtomicLabel[a3],idToAtomicLabel[a2],idToAtomicLabel[a1])
+
+    if atype1 in angleTypes:
+      angleid = angleTypes[atype1]
+      astring = atype1
+    elif atype2 in angleTypes:
+      angleid = angleTypes[atype2]
+      astring = atype2
+    else:
+      nangleTypes += 1
+      mapaTypes[nangleTypes] = atype1
+      angleid = nangleTypes
+      angleTypes[atype1] = nangleTypes
+      astring = atype1
+
+    nangles += 1
+    outAngles += "\t%d\t%d\t%d\t%d\t%d\t# %s\n" % (nangles, angleid, a1+1, a2+1, a3+1, astring)
+
+  # identify dihedral types and create dihedral list
+  nmol.FindTorsions()
+  outAngles = "Dihedrals # charmmfsw\n\n"
+
+  dihedralTypes = {}
+  mapdTypes = {}
+  ndihedralTypes = 0
+  ndihedrals = 0
+  dihedralIterator = openbabel.OBMolTorsionIter(nmol)
+  for i, dihedral in enumerate(dihedralIterator, 1):
+    a1 = dihedral[0]
+    a2 = dihedral[1]
+    a3 = dihedral[2]
+    a4 = dihedral[3]
+
+    # remap to a real atom if needed
+    if a1 >= natoms:
+      a1 = realnumber[a1-natoms]
+    if a2 >= natoms:
+      a2 = realnumber[a2-natoms]
+    if a3 >= natoms:
+      a3 = realnumber[a3-natoms]
+    if a4 >= natoms:
+      a4 = realnumber[a4-natoms]
 
     atype1 = "%s - %s - %s" % (idToAtomicLabel[a1],idToAtomicLabel[a2],idToAtomicLabel[a3])
     atype2 = "%s - %s - %s" % (idToAtomicLabel[a3],idToAtomicLabel[a2],idToAtomicLabel[a1])
