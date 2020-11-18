@@ -271,8 +271,7 @@ def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds):
     nmol.DeleteBond(bond)
 
   # identify angle types and create angle list
-  if pbcbonds:
-    nmol.FindAngles()
+  nmol.FindAngles()
   outAngles = "Angles # harmonic\n\n"
 
   angleTypes = {}
