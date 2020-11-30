@@ -30,7 +30,7 @@ def extant_file(x):
     return x
 
 
-def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds):
+def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds, printdih):
   iaxis = {"x": 0, "y": 1, "z": 2}
   if axis in iaxis:
     repaxis = iaxis[axis]
@@ -209,7 +209,7 @@ def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds):
 
     write("replicated.xyz", acoords) # write the structure with the replicated atoms
 
-    # # write new mol with new bonds
+    # write new mol with new bonds
     nmol = openbabel.OBMol()
     nmol.BeginModify()
     for idx, (num, position) in enumerate(zip(acoords.get_atomic_numbers(), acoords.positions)):
@@ -220,7 +220,16 @@ def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds):
     # nmol.PerceiveBondOrders() # super slow becauses it looks for rings
     nmol.EndModify()
   else:
-    nmol = mol
+    acoords = Atoms(acoords, cell=boxinfo, pbc=False)
+    nmol = openbabel.OBMol()
+    nmol.BeginModify()
+    for idx, (num, position) in enumerate(zip(acoords.get_atomic_numbers(), acoords.positions)):
+        a = nmol.NewAtom(idx)
+        a.SetAtomicNum(int(num))
+        a.SetVector(*position)
+    nmol.ConnectTheDots()
+    # nmol.PerceiveBondOrders() # super slow becauses it looks for rings
+    nmol.EndModify()
 
   # identify bond types and create bond list
   outBonds = "Bonds # harmonic\n\n"
@@ -311,8 +320,57 @@ def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds):
     nangles += 1
     outAngles += "\t%d\t%d\t%d\t%d\t%d\t# %s\n" % (nangles, angleid, a1+1, a2+1, a3+1, astring)
 
+  # identify dihedral types and create dihedral list
+  if printdih:
+    nmol.FindTorsions()
+    outDihedrals = "Dihedrals # charmmfsw\n\n"
+
+    dihedralTypes = {}
+    mapdTypes = {}
+    ndihedralTypes = 0
+    ndihedrals = 0
+    dihedralIterator = openbabel.OBMolTorsionIter(nmol)
+    for i, dihedral in enumerate(dihedralIterator, 1):
+      a1 = dihedral[0]
+      a2 = dihedral[1]
+      a3 = dihedral[2]
+      a4 = dihedral[3]
+
+      # remap to a real atom if needed
+      if a1 >= natoms:
+        a1 = realnumber[a1-natoms]
+      if a2 >= natoms:
+        a2 = realnumber[a2-natoms]
+      if a3 >= natoms:
+        a3 = realnumber[a3-natoms]
+      if a4 >= natoms:
+        a4 = realnumber[a4-natoms]
+
+      dtype1 = "%s - %s - %s - %s" % (idToAtomicLabel[a1],idToAtomicLabel[a2],idToAtomicLabel[a3],idToAtomicLabel[a4])
+      dtype2 = "%s - %s - %s - %s" % (idToAtomicLabel[a4],idToAtomicLabel[a3],idToAtomicLabel[a2],idToAtomicLabel[a1])
+
+      if dtype1 in dihedralTypes:
+        dihedralid = dihedralTypes[dtype1]
+        dstring = dtype1
+      elif dtype2 in dihedralTypes:
+        dihedralid = dihedralTypes[dtype2]
+        dstring = dtype2
+      else:
+        ndihedralTypes += 1
+        mapdTypes[ndihedralTypes] = dtype1
+        dihedralid = ndihedralTypes
+        dihedralTypes[dtype1] = ndihedralTypes
+        dstring = dtype1
+
+      ndihedrals += 1
+      outDihedrals += "\t%d\t%d\t%d\t%d\t%d\t%d\t# %s\n" % (ndihedrals, dihedralid, a1+1, a2+1, a3+1, a4+1, dstring)
+
   # print header
-  header = "LAMMPS topology created from %s using create_data_lmp.py - By Henrique Musseli Cezar, 2020\n\n\t%d atoms\n\t%d bonds\n\t%d angles\n\n\t%d atom types\n\t%d bond types\n\t%d angle types\n\n" % (fname, natoms, nbonds, nangles, nmassTypes, nbondTypes, nangleTypes)
+  if printdih:
+    header = "LAMMPS topology created from %s using pdb2lmp.py - By Henrique Musseli Cezar, 2020\n\n\t%d atoms\n\t%d bonds\n\t%d angles\n\t%d dihedrals\n\n\t%d atom types\n\t%d bond types\n\t%d angle types\n\t%d dihedral types\n\n" % (fname, natoms, nbonds, nangles, ndihedrals, nmassTypes, nbondTypes, nangleTypes, ndihedralTypes)
+  else:
+    header = "LAMMPS topology created from %s using pdb2lmp.py - By Henrique Musseli Cezar, 2020\n\n\t%d atoms\n\t%d bonds\n\t%d angles\n\n\t%d atom types\n\t%d bond types\n\t%d angle types\n\n" % (fname, natoms, nbonds, nangles, nmassTypes, nbondTypes, nangleTypes)
+
   # add box info
   if fromBounds:
     boxsize = [(xmin,xmax),(ymin,ymax),(zmin,zmax)]
@@ -342,9 +400,18 @@ def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds):
   outCoeffs += "\nAngle Coeffs\n\n"
 
   for i in range(1,nangleTypes+1):
-    outCoeffs += "\t%d\tK\ttetha_0 (deg)\t# %s\n" % (i, mapaTypes[i])
+    outCoeffs += "\t%d\tK\ttetha_0 (deg)\t# %s\n" %(i, mapaTypes[i])
 
-  return header+"\n"+outMasses+"\n"+outCoeffs+"\n"+outAtoms+"\n"+outBonds+"\n"+outAngles
+  if printdih:
+    outCoeffs += "\nDihedral Coeffs\n\n"
+
+    for i in range(1,ndihedralTypes+1):
+      outCoeffs += "\t%d\tK\tn\tphi_0 (deg)\tw\t# %s\n" % (i, mapdTypes[i])
+
+  if printdih:
+    return header+"\n"+outMasses+"\n"+outCoeffs+"\n"+outAtoms+"\n"+outBonds+"\n"+outAngles+"\n"+outDihedrals    
+  else:
+    return header+"\n"+outMasses+"\n"+outCoeffs+"\n"+outAtoms+"\n"+outBonds+"\n"+outAngles
 
 
 if __name__ == '__main__':
@@ -354,7 +421,8 @@ if __name__ == '__main__':
   parser.add_argument("--axis", default="z", help="axis to replicate and check for bonds and angles in the PBC (default: z)")
   parser.add_argument("--buffer-length-axis", type=float, help="length of the extra space in the replicated axis for PBC (default: 1.0 - NOT considered for non orthogonal cell)", default=1.)
   parser.add_argument("--buffer-length-orthogonal", type=float, help="length of size orthogonal to the axis with PBC (default: 30.0 - NOT considered for non orthogonal cell)", default=30.)
-  parser.add_argument("--pbc-bonds", action="store_true", help="look for bonds and angles in the pbc images?",)
+  parser.add_argument("--pbc-bonds", action="store_true", help="look for bonds and angles in the pbc images?")
+  parser.add_argument("--ignore-dihedrals", action="store_true", help="does not print info about dihedrdals in the topology")
 
   args = parser.parse_args()
 
@@ -365,7 +433,12 @@ if __name__ == '__main__':
     print("Error: only .pdb files are accepted.")
     sys.exit(0)
 
-  outlmp = parse_mol_info(args.pdbfile, args.charges, args.axis, args.buffer_length_axis, args.buffer_length_orthogonal, args.pbc_bonds)
+  if args.ignore_dihedrals:
+    printdih = False
+  else:
+    printdih = True
+
+  outlmp = parse_mol_info(args.pdbfile, args.charges, args.axis, args.buffer_length_axis, args.buffer_length_orthogonal, args.pbc_bonds, printdih)
 
   print(outlmp)
 
