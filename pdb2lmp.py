@@ -209,7 +209,7 @@ def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds, printdih):
 
     write("replicated.xyz", acoords) # write the structure with the replicated atoms
 
-    # # write new mol with new bonds
+    # write new mol with new bonds
     nmol = openbabel.OBMol()
     nmol.BeginModify()
     for idx, (num, position) in enumerate(zip(acoords.get_atomic_numbers(), acoords.positions)):
@@ -220,7 +220,16 @@ def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds, printdih):
     # nmol.PerceiveBondOrders() # super slow becauses it looks for rings
     nmol.EndModify()
   else:
-    nmol = mol
+    acoords = Atoms(acoords, cell=boxinfo, pbc=False)
+    nmol = openbabel.OBMol()
+    nmol.BeginModify()
+    for idx, (num, position) in enumerate(zip(acoords.get_atomic_numbers(), acoords.positions)):
+        a = nmol.NewAtom(idx)
+        a.SetAtomicNum(int(num))
+        a.SetVector(*position)
+    nmol.ConnectTheDots()
+    # nmol.PerceiveBondOrders() # super slow becauses it looks for rings
+    nmol.EndModify()
 
   # identify bond types and create bond list
   outBonds = "Bonds # harmonic\n\n"
@@ -312,8 +321,8 @@ def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds, printdih):
     outAngles += "\t%d\t%d\t%d\t%d\t%d\t# %s\n" % (nangles, angleid, a1+1, a2+1, a3+1, astring)
 
   # identify dihedral types and create dihedral list
-  nmol.FindTorsions()
   if printdih:
+    nmol.FindTorsions()
     outDihedrals = "Dihedrals # charmmfsw\n\n"
 
     dihedralTypes = {}
@@ -348,15 +357,13 @@ def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds, printdih):
         dstring = dtype2
       else:
         ndihedralTypes += 1
-        mapaTypes[ndihedralTypes] = dtype1
+        mapdTypes[ndihedralTypes] = dtype1
         dihedralid = ndihedralTypes
         dihedralTypes[dtype1] = ndihedralTypes
         dstring = dtype1
 
       ndihedrals += 1
-      outDihedrals += "\t%d\t%d\t%d\t%d\t%d\t# %s\n" % (ndihedrals, dihedralid, a1+1, a2+1, a3+1, a4+1, dstring)
-  else:
-    outDihedrals = ""
+      outDihedrals += "\t%d\t%d\t%d\t%d\t%d\t%d\t# %s\n" % (ndihedrals, dihedralid, a1+1, a2+1, a3+1, a4+1, dstring)
 
   # print header
   if printdih:
@@ -393,9 +400,18 @@ def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds, printdih):
   outCoeffs += "\nAngle Coeffs\n\n"
 
   for i in range(1,nangleTypes+1):
-    outCoeffs += "\t%d\tK\ttetha_0 (deg)\t# %s\n" % (i, mapaTypes[i])
+    outCoeffs += "\t%d\tK\ttetha_0 (deg)\t# %s\n" %(i, mapaTypes[i])
 
-  return header+"\n"+outMasses+"\n"+outCoeffs+"\n"+outAtoms+"\n"+outBonds+"\n"+outAngles
+  if printdih:
+    outCoeffs += "\nDihedral Coeffs\n\n"
+
+    for i in range(1,ndihedralTypes+1):
+      outCoeffs += "\t%d\tK\tn\tphi_0 (deg)\tw\t# %s\n" % (i, mapdTypes[i])
+
+  if printdih:
+    return header+"\n"+outMasses+"\n"+outCoeffs+"\n"+outAtoms+"\n"+outBonds+"\n"+outAngles+"\n"+outDihedrals    
+  else:
+    return header+"\n"+outMasses+"\n"+outCoeffs+"\n"+outAtoms+"\n"+outBonds+"\n"+outAngles
 
 
 if __name__ == '__main__':
