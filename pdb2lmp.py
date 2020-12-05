@@ -30,7 +30,7 @@ def extant_file(x):
     return x
 
 
-def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds, printdih):
+def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds, printdih, ignorebonds):
   iaxis = {"x": 0, "y": 1, "z": 2}
   if axis in iaxis:
     repaxis = iaxis[axis]
@@ -239,102 +239,80 @@ def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds, printdih):
   nbondTypes = 0
   nbonds = 0
   bondsToDelete = []
-  bondIterator = openbabel.OBMolBondIter(nmol)
-  for i, bond in enumerate(bondIterator, 1):    
-    b1 = bond.GetBeginAtom().GetId()    
-    b2 = bond.GetEndAtom().GetId()
+  bondIterators = []
+  if ignorebonds:
+    sepmols = nmol.Separate()
+    for smol in sepmols[1:]:
+      bondIterators.append(openbabel.OBMolBondIter(smol))
+  else:
+    bondIterators.append(openbabel.OBMolBondIter(nmol))
 
-    # check if its a bond of the replica only
-    if (b1 >= natoms) and (b2 >= natoms):
-      bondsToDelete.append(bond)
-      continue
-    # remap to a real atom if needed
-    if b1 >= natoms:
-      b1 = realnumber[b1-natoms]
-    if b2 >= natoms:
-      b2 = realnumber[b2-natoms]
+  lastidx = 1
+  for iterator in bondIterators:
+    for i, bond in enumerate(iterator, lastidx):
+      b1 = bond.GetBeginAtom().GetId()    
+      b2 = bond.GetEndAtom().GetId()
 
-    # identify bond type
-    btype1 = "%s - %s" % (idToAtomicLabel[b1],idToAtomicLabel[b2])
-    btype2 = "%s - %s" % (idToAtomicLabel[b2],idToAtomicLabel[b1])
+      # check if its a bond of the replica only
+      if (b1 >= natoms) and (b2 >= natoms):
+        bondsToDelete.append(bond)
+        continue
+      # remap to a real atom if needed
+      if b1 >= natoms:
+        b1 = realnumber[b1-natoms]
+      if b2 >= natoms:
+        b2 = realnumber[b2-natoms]
 
-    if btype1 in bondTypes:
-      bondid = bondTypes[btype1]
-      bstring = btype1
-    elif btype2 in bondTypes:
-      bondid = bondTypes[btype2]
-      bstring = btype2
-    else:
-      nbondTypes += 1
-      mapbTypes[nbondTypes] = btype1
-      bondid = nbondTypes
-      bondTypes[btype1] = nbondTypes
-      bstring = btype1
+      # identify bond type
+      btype1 = "%s - %s" % (idToAtomicLabel[b1],idToAtomicLabel[b2])
+      btype2 = "%s - %s" % (idToAtomicLabel[b2],idToAtomicLabel[b1])
 
-    nbonds += 1
-    outBonds += "\t%d\t%d\t%d\t%d\t# %s\n" % (nbonds, bondid, b1+1, b2+1, bstring)
+      if btype1 in bondTypes:
+        bondid = bondTypes[btype1]
+        bstring = btype1
+      elif btype2 in bondTypes:
+        bondid = bondTypes[btype2]
+        bstring = btype2
+      else:
+        nbondTypes += 1
+        mapbTypes[nbondTypes] = btype1
+        bondid = nbondTypes
+        bondTypes[btype1] = nbondTypes
+        bstring = btype1
 
+      nbonds += 1
+      outBonds += "\t%d\t%d\t%d\t%d\t# %s\n" % (nbonds, bondid, b1+1, b2+1, bstring)
+
+    lastidx = i
 
   # delete the bonds of atoms from other replicas
   for bond in bondsToDelete:
     nmol.DeleteBond(bond)
 
   # identify angle types and create angle list
-  nmol.FindAngles()
-  outAngles = "Angles # harmonic\n\n"
-
   angleTypes = {}
   mapaTypes = {}
   nangleTypes = 0
   nangles = 0
-  angleIterator = openbabel.OBMolAngleIter(nmol)
-  for i, angle in enumerate(angleIterator, 1):
-    a1 = angle[1]
-    a2 = angle[0]
-    a3 = angle[2]
+  angleIterators = []
 
-    # remap to a real atom if needed
-    if a1 >= natoms:
-      a1 = realnumber[a1-natoms]
-    if a2 >= natoms:
-      a2 = realnumber[a2-natoms]
-    if a3 >= natoms:
-      a3 = realnumber[a3-natoms]
+  if ignorebonds:
+    sepmols = nmol.Separate()
+    for smol in sepmols[1:]:
+      smol.FindAngles()
+      angleIterators.append(openbabel.OBMolAngleIter(smol))
+  else:
+    nmol.FindAngles()
+    angleIterators.append(openbabel.OBMolAngleIter(nmol))
+  
+  outAngles = "Angles # harmonic\n\n"
 
-    atype1 = "%s - %s - %s" % (idToAtomicLabel[a1],idToAtomicLabel[a2],idToAtomicLabel[a3])
-    atype2 = "%s - %s - %s" % (idToAtomicLabel[a3],idToAtomicLabel[a2],idToAtomicLabel[a1])
-
-    if atype1 in angleTypes:
-      angleid = angleTypes[atype1]
-      astring = atype1
-    elif atype2 in angleTypes:
-      angleid = angleTypes[atype2]
-      astring = atype2
-    else:
-      nangleTypes += 1
-      mapaTypes[nangleTypes] = atype1
-      angleid = nangleTypes
-      angleTypes[atype1] = nangleTypes
-      astring = atype1
-
-    nangles += 1
-    outAngles += "\t%d\t%d\t%d\t%d\t%d\t# %s\n" % (nangles, angleid, a1+1, a2+1, a3+1, astring)
-
-  # identify dihedral types and create dihedral list
-  if printdih:
-    nmol.FindTorsions()
-    outDihedrals = "Dihedrals # charmmfsw\n\n"
-
-    dihedralTypes = {}
-    mapdTypes = {}
-    ndihedralTypes = 0
-    ndihedrals = 0
-    dihedralIterator = openbabel.OBMolTorsionIter(nmol)
-    for i, dihedral in enumerate(dihedralIterator, 1):
-      a1 = dihedral[0]
-      a2 = dihedral[1]
-      a3 = dihedral[2]
-      a4 = dihedral[3]
+  lastidx = 1
+  for iterator in angleIterators:
+    for i, angle in enumerate(iterator, lastidx):
+      a1 = angle[1]
+      a2 = angle[0]
+      a3 = angle[2]
 
       # remap to a real atom if needed
       if a1 >= natoms:
@@ -343,27 +321,85 @@ def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds, printdih):
         a2 = realnumber[a2-natoms]
       if a3 >= natoms:
         a3 = realnumber[a3-natoms]
-      if a4 >= natoms:
-        a4 = realnumber[a4-natoms]
 
-      dtype1 = "%s - %s - %s - %s" % (idToAtomicLabel[a1],idToAtomicLabel[a2],idToAtomicLabel[a3],idToAtomicLabel[a4])
-      dtype2 = "%s - %s - %s - %s" % (idToAtomicLabel[a4],idToAtomicLabel[a3],idToAtomicLabel[a2],idToAtomicLabel[a1])
+      atype1 = "%s - %s - %s" % (idToAtomicLabel[a1],idToAtomicLabel[a2],idToAtomicLabel[a3])
+      atype2 = "%s - %s - %s" % (idToAtomicLabel[a3],idToAtomicLabel[a2],idToAtomicLabel[a1])
 
-      if dtype1 in dihedralTypes:
-        dihedralid = dihedralTypes[dtype1]
-        dstring = dtype1
-      elif dtype2 in dihedralTypes:
-        dihedralid = dihedralTypes[dtype2]
-        dstring = dtype2
+      if atype1 in angleTypes:
+        angleid = angleTypes[atype1]
+        astring = atype1
+      elif atype2 in angleTypes:
+        angleid = angleTypes[atype2]
+        astring = atype2
       else:
-        ndihedralTypes += 1
-        mapdTypes[ndihedralTypes] = dtype1
-        dihedralid = ndihedralTypes
-        dihedralTypes[dtype1] = ndihedralTypes
-        dstring = dtype1
+        nangleTypes += 1
+        mapaTypes[nangleTypes] = atype1
+        angleid = nangleTypes
+        angleTypes[atype1] = nangleTypes
+        astring = atype1
 
-      ndihedrals += 1
-      outDihedrals += "\t%d\t%d\t%d\t%d\t%d\t%d\t# %s\n" % (ndihedrals, dihedralid, a1+1, a2+1, a3+1, a4+1, dstring)
+      nangles += 1
+      outAngles += "\t%d\t%d\t%d\t%d\t%d\t# %s\n" % (nangles, angleid, a1+1, a2+1, a3+1, astring)
+
+    lastidx = i
+
+  # identify dihedral types and create dihedral list
+  if printdih:
+    dihedralTypes = {}
+    mapdTypes = {}
+    ndihedralTypes = 0
+    ndihedrals = 0
+    dihedralIterators = []
+
+    if ignorebonds:
+      sepmols = nmol.Separate()
+      for smol in sepmols[1:]:
+        smol.FindTorsions()
+        dihedralIterators.append(openbabel.OBMolTorsionIter(smol))
+    else:
+      nmol.FindTorsions()
+      dihedralIterators.append(openbabel.OBMolTorsionIter(nmol))
+
+    outDihedrals = "Dihedrals # charmmfsw\n\n"
+
+    lastidx = 1
+    for iterator in dihedralIterators:
+      for i, dihedral in enumerate(iterator, lastidx):
+        a1 = dihedral[0]
+        a2 = dihedral[1]
+        a3 = dihedral[2]
+        a4 = dihedral[3]
+
+        # remap to a real atom if needed
+        if a1 >= natoms:
+          a1 = realnumber[a1-natoms]
+        if a2 >= natoms:
+          a2 = realnumber[a2-natoms]
+        if a3 >= natoms:
+          a3 = realnumber[a3-natoms]
+        if a4 >= natoms:
+          a4 = realnumber[a4-natoms]
+
+        dtype1 = "%s - %s - %s - %s" % (idToAtomicLabel[a1],idToAtomicLabel[a2],idToAtomicLabel[a3],idToAtomicLabel[a4])
+        dtype2 = "%s - %s - %s - %s" % (idToAtomicLabel[a4],idToAtomicLabel[a3],idToAtomicLabel[a2],idToAtomicLabel[a1])
+
+        if dtype1 in dihedralTypes:
+          dihedralid = dihedralTypes[dtype1]
+          dstring = dtype1
+        elif dtype2 in dihedralTypes:
+          dihedralid = dihedralTypes[dtype2]
+          dstring = dtype2
+        else:
+          ndihedralTypes += 1
+          mapdTypes[ndihedralTypes] = dtype1
+          dihedralid = ndihedralTypes
+          dihedralTypes[dtype1] = ndihedralTypes
+          dstring = dtype1
+
+        ndihedrals += 1
+        outDihedrals += "\t%d\t%d\t%d\t%d\t%d\t%d\t# %s\n" % (ndihedrals, dihedralid, a1+1, a2+1, a3+1, a4+1, dstring)
+
+      lastidx = i
 
   # print header
   if printdih:
@@ -423,6 +459,7 @@ if __name__ == '__main__':
   parser.add_argument("--buffer-length-orthogonal", type=float, help="length of size orthogonal to the axis with PBC (default: 30.0 - NOT considered for non orthogonal cell)", default=30.)
   parser.add_argument("--pbc-bonds", action="store_true", help="look for bonds and angles in the pbc images?")
   parser.add_argument("--ignore-dihedrals", action="store_true", help="does not print info about dihedrdals in the topology")
+  parser.add_argument("--ignore-bonds-solute", action="store_true", help="does not look for bonds angles and dihedrals for the first molecule")
 
   args = parser.parse_args()
 
@@ -438,7 +475,7 @@ if __name__ == '__main__':
   else:
     printdih = True
 
-  outlmp = parse_mol_info(args.pdbfile, args.charges, args.axis, args.buffer_length_axis, args.buffer_length_orthogonal, args.pbc_bonds, printdih)
+  outlmp = parse_mol_info(args.pdbfile, args.charges, args.axis, args.buffer_length_axis, args.buffer_length_orthogonal, args.pbc_bonds, printdih, args.ignore_bonds_solute)
 
   print(outlmp)
 
