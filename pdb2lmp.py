@@ -10,8 +10,12 @@ Date: MAY/2020
 import sys
 import argparse
 import os
-import openbabel
-import pybel
+try: 
+  import pybel
+  import openbabel
+except:
+  from openbabel import pybel
+  from openbabel import openbabel
 import numpy as np
 import math
 from ase import Atom, Atoms
