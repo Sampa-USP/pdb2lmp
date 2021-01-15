@@ -34,7 +34,7 @@ def extant_file(x):
     return x
 
 
-def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds, printdih, ignorebonds):
+def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds, printdih, ignorebonds, ignoreimproper):
   iaxis = {"x": 0, "y": 1, "z": 2}
   if axis in iaxis:
     repaxis = iaxis[axis]
@@ -405,9 +405,84 @@ def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds, printdih, igno
 
       lastidx = i
 
+    if not ignoreimproper:
+      # look for the improper dihedrals
+      improperDihedralTypes = {}
+      mapiDTypes = {}
+      niDihedralTypes = 0
+      niDihedrals = 0
+      mollist = []
+
+      if ignorebonds:
+        sepmols = nmol.Separate()
+        for smol in sepmols[1:]:
+          smol.PerceiveBondOrders()
+          mollist.append(smol)
+      else:
+        nmol.PerceiveBondOrders()
+        mollist.append(nmol)
+
+      outImpropers = "Impropers # harmonic\n\n"
+
+      for imol in mollist:
+        atomIterator = openbabel.OBMolAtomIter(imol)
+        for atom in atomIterator:
+          try:
+            # print(atom.GetHyb(), atom.GetAtomicNum(), atom.GetValence())
+            expDegree = atom.GetValence()
+          except:
+            # print(atom.GetHyb(), atom.GetAtomicNum(), atom.GetExplicitDegree())
+            expDegree = atom.GetExplicitDegree()
+
+          # returns impropers for atoms with connected to other 3 atoms and SP2 hybridization
+          if atom.GetHyb() == 2 and expDegree == 3:
+            connectedAtoms = []
+            for atom2, depth in openbabel.OBMolAtomBFSIter(imol, atom.GetId()+1):
+              if depth == 2:
+                connectedAtoms.append(atom2)
+
+            torsional = [atom.GetId()+1, connectedAtoms[0].GetId()+1, connectedAtoms[1].GetId()+1, connectedAtoms[2].GetId()+1]
+
+            a1 = torsional[0]-1
+            a2 = torsional[1]-1
+            a3 = torsional[2]-1
+            a4 = torsional[3]-1
+
+            # remap to a real atom if needed
+            if a1 >= natoms:
+              a1 = realnumber[a1-natoms]
+            if a2 >= natoms:
+              a2 = realnumber[a2-natoms]
+            if a3 >= natoms:
+              a3 = realnumber[a3-natoms]
+            if a4 >= natoms:
+              a4 = realnumber[a4-natoms]
+
+            dtype1 = "%s - %s - %s - %s" % (idToAtomicLabel[a1],idToAtomicLabel[a2],idToAtomicLabel[a3],idToAtomicLabel[a4])
+            dtype2 = "%s - %s - %s - %s" % (idToAtomicLabel[a4],idToAtomicLabel[a3],idToAtomicLabel[a2],idToAtomicLabel[a1])
+
+            if dtype1 in improperDihedralTypes:
+              idihedralid = improperDihedralTypes[dtype1]
+              dstring = dtype1
+            elif dtype2 in improperDihedralTypes:
+              idihedralid = improperDihedralTypes[dtype2]
+              dstring = dtype2
+            else:
+              niDihedralTypes += 1
+              mapiDTypes[niDihedralTypes] = dtype1
+              idihedralid = niDihedralTypes
+              improperDihedralTypes[dtype1] = niDihedralTypes
+              dstring = dtype1
+
+            niDihedrals += 1
+            outImpropers += "\t%d\t%d\t%d\t%d\t%d\t%d\t# %s\n" % (niDihedrals, idihedralid, a1+1, a2+1, a3+1, a4+1, dstring)
+
   # print header
-  if printdih:
-    header = "LAMMPS topology created from %s using pdb2lmp.py - By Henrique Musseli Cezar, 2020\n\n\t%d atoms\n\t%d bonds\n\t%d angles\n\t%d dihedrals\n\n\t%d atom types\n\t%d bond types\n\t%d angle types\n\t%d dihedral types\n\n" % (fname, natoms, nbonds, nangles, ndihedrals, nmassTypes, nbondTypes, nangleTypes, ndihedralTypes)
+  if printdih and (ndihedrals > 0):
+    if ignoreimproper or (niDihedrals == 0):
+      header = "LAMMPS topology created from %s using pdb2lmp.py - By Henrique Musseli Cezar, 2020\n\n\t%d atoms\n\t%d bonds\n\t%d angles\n\t%d dihedrals\n\n\t%d atom types\n\t%d bond types\n\t%d angle types\n\t%d dihedral types\n\n" % (fname, natoms, nbonds, nangles, ndihedrals, nmassTypes, nbondTypes, nangleTypes, ndihedralTypes)
+    else:
+      header = "LAMMPS topology created from %s using pdb2lmp.py - By Henrique Musseli Cezar, 2020\n\n\t%d atoms\n\t%d bonds\n\t%d angles\n\t%d dihedrals\n\t%d impropers\n\n\t%d atom types\n\t%d bond types\n\t%d angle types\n\t%d dihedral types\n\t%d improper types\n\n" % (fname, natoms, nbonds, nangles, ndihedrals, niDihedrals, nmassTypes, nbondTypes, nangleTypes, ndihedralTypes, niDihedralTypes)
   else:
     header = "LAMMPS topology created from %s using pdb2lmp.py - By Henrique Musseli Cezar, 2020\n\n\t%d atoms\n\t%d bonds\n\t%d angles\n\n\t%d atom types\n\t%d bond types\n\t%d angle types\n\n" % (fname, natoms, nbonds, nangles, nmassTypes, nbondTypes, nangleTypes)
 
@@ -448,8 +523,18 @@ def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds, printdih, igno
     for i in range(1,ndihedralTypes+1):
       outCoeffs += "\t%d\tK\tn\tphi_0 (deg)\tw\t# %s\n" % (i, mapdTypes[i])
 
+    if not ignoreimproper:
+      outCoeffs += "\nImproper Coeffs\n\n"
+
+      for i in range(1,niDihedralTypes+1):
+        outCoeffs += "\t%d\tK\txi_0 (deg)\t# %s\n" % (i, mapiDTypes[i])
+
+
   if printdih:
-    return header+"\n"+outMasses+"\n"+outCoeffs+"\n"+outAtoms+"\n"+outBonds+"\n"+outAngles+"\n"+outDihedrals    
+    if ignoreimproper:
+      return header+"\n"+outMasses+"\n"+outCoeffs+"\n"+outAtoms+"\n"+outBonds+"\n"+outAngles+"\n"+outDihedrals    
+    else:
+      return header+"\n"+outMasses+"\n"+outCoeffs+"\n"+outAtoms+"\n"+outBonds+"\n"+outAngles+"\n"+outDihedrals+"\n"+outImpropers    
   else:
     return header+"\n"+outMasses+"\n"+outCoeffs+"\n"+outAtoms+"\n"+outBonds+"\n"+outAngles
 
@@ -463,6 +548,7 @@ if __name__ == '__main__':
   parser.add_argument("--buffer-length-orthogonal", type=float, help="length of size orthogonal to the axis with PBC (default: 30.0 - NOT considered for non orthogonal cell)", default=30.)
   parser.add_argument("--pbc-bonds", action="store_true", help="look for bonds and angles in the pbc images?")
   parser.add_argument("--ignore-dihedrals", action="store_true", help="does not print info about dihedrdals in the topology")
+  parser.add_argument("--ignore-impropers", action="store_true", help="if dihedrals are being printed, you can ignore the impropers with this flag")
   parser.add_argument("--ignore-bonds-solute", action="store_true", help="does not look for bonds angles and dihedrals for the first molecule")
 
   args = parser.parse_args()
@@ -479,7 +565,7 @@ if __name__ == '__main__':
   else:
     printdih = True
 
-  outlmp = parse_mol_info(args.pdbfile, args.charges, args.axis, args.buffer_length_axis, args.buffer_length_orthogonal, args.pbc_bonds, printdih, args.ignore_bonds_solute)
+  outlmp = parse_mol_info(args.pdbfile, args.charges, args.axis, args.buffer_length_axis, args.buffer_length_orthogonal, args.pbc_bonds, printdih, args.ignore_bonds_solute, args.ignore_impropers)
 
   print(outlmp)
 
