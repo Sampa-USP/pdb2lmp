@@ -517,21 +517,21 @@ def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds, printdih, igno
   for i in range(1,nangleTypes+1):
     outCoeffs += "\t%d\tK\ttetha_0 (deg)\t# %s\n" %(i, mapaTypes[i])
 
-  if printdih:
+  if printdih and (ndihedrals > 0):
     outCoeffs += "\nDihedral Coeffs\n\n"
 
     for i in range(1,ndihedralTypes+1):
       outCoeffs += "\t%d\tK\tn\tphi_0 (deg)\tw\t# %s\n" % (i, mapdTypes[i])
 
-    if not ignoreimproper:
+    if not ignoreimproper and (niDihedralTypes > 0):
       outCoeffs += "\nImproper Coeffs\n\n"
 
       for i in range(1,niDihedralTypes+1):
         outCoeffs += "\t%d\tK\txi_0 (deg)\t# %s\n" % (i, mapiDTypes[i])
 
 
-  if printdih:
-    if ignoreimproper:
+  if printdih and (ndihedrals > 0):
+    if ignoreimproper or (niDihedralTypes == 0):
       return header+"\n"+outMasses+"\n"+outCoeffs+"\n"+outAtoms+"\n"+outBonds+"\n"+outAngles+"\n"+outDihedrals    
     else:
       return header+"\n"+outMasses+"\n"+outCoeffs+"\n"+outAtoms+"\n"+outBonds+"\n"+outAngles+"\n"+outDihedrals+"\n"+outImpropers    
