@@ -545,7 +545,7 @@ if __name__ == '__main__':
   parser.add_argument("--charges", type=extant_file, help="path to a file associating PDB label to atomic charge (one pair per line)")
   parser.add_argument("--axis", default="z", help="axis to replicate and check for bonds and angles in the PBC (default: z)")
   parser.add_argument("--buffer-length-axis", type=float, help="length of the extra space in the replicated axis for PBC (default: 1.0 - NOT considered for non orthogonal cell)", default=1.)
-  parser.add_argument("--buffer-length-orthogonal", type=float, help="length of size orthogonal to the axis with PBC (default: 30.0 - NOT considered for non orthogonal cell)", default=30.)
+  parser.add_argument("--buffer-length-orthogonal", type=float, help="length of size orthogonal to the axis with PBC (default: 1.0 - NOT considered for non orthogonal cell)", default=1.)
   parser.add_argument("--pbc-bonds", action="store_true", help="look for bonds and angles in the pbc images?")
   parser.add_argument("--ignore-dihedrals", action="store_true", help="does not print info about dihedrdals in the topology")
   parser.add_argument("--ignore-impropers", action="store_true", help="if dihedrals are being printed, you can ignore the impropers with this flag")
