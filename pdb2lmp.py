@@ -93,7 +93,7 @@ def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds, printdih, igno
   idToAtomicLabel = {}
   for res in openbabel.OBResidueIter(mol):
     for atom in openbabel.OBResidueAtomIter(res):
-      if atomIdToMol[atom.GetId()] > 1:
+      if (atomIdToMol[atom.GetId()] > 1) and (len(mTypes) > 1):
         idToAtomicLabel[atom.GetId()] = res.GetAtomID(atom).strip()+str(mapmTypes[atomIdToMol[atom.GetId()]])
       else:
         idToAtomicLabel[atom.GetId()] = res.GetAtomID(atom).strip()
