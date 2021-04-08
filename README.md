@@ -31,6 +31,8 @@ The simulation box size is determined by either the CRYST1 line in the PDB file 
 
 The `--axis` option can be used when the structure has some kind of axial symmetry, such as in nanotubes.
 
+A simple example of the usage for a box full of water molecules can be seen [here](https://github.com/Sampa-USP/useful-hacks/tree/master/TopoLiquid).
+
 ## Contributing
 
 Feel free to create issues reporting bugs and/or suggesting enhancements, I'll address them as soon as possible. Pull requests are also encouraged.
