@@ -305,6 +305,7 @@ def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds, printdih, igno
     for smol in sepmols[1:]:
       smol.FindAngles()
       angleIterators.append(openbabel.OBMolAngleIter(smol))
+    prevnumatoms = sepmols[0].NumAtoms()
   else:
     nmol.FindAngles()
     angleIterators.append(openbabel.OBMolAngleIter(nmol))
@@ -312,11 +313,16 @@ def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds, printdih, igno
   outAngles = "Angles # harmonic\n\n"
 
   lastidx = 1
-  for iterator in angleIterators:
+  for j, iterator in enumerate(angleIterators, 1):
     for i, angle in enumerate(iterator, lastidx):
-      a1 = angle[1]
-      a2 = angle[0]
-      a3 = angle[2]
+      if ignorebonds:
+        a1 = angle[1] + prevnumatoms
+        a2 = angle[0] + prevnumatoms
+        a3 = angle[2] + prevnumatoms
+      else:
+        a1 = angle[1]
+        a2 = angle[0]
+        a3 = angle[2]
 
       # remap to a real atom if needed
       if a1 >= natoms:
@@ -346,6 +352,8 @@ def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds, printdih, igno
       outAngles += "\t%d\t%d\t%d\t%d\t%d\t# %s\n" % (nangles, angleid, a1+1, a2+1, a3+1, astring)
 
     lastidx = i
+    if ignorebonds:
+      prevnumatoms += sepmols[j].NumAtoms()
 
   # identify dihedral types and create dihedral list
   if printdih:
