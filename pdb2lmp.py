@@ -13,9 +13,11 @@ import os
 try: 
   import pybel
   import openbabel
+  ob3 = False
 except:
   from openbabel import pybel
   from openbabel import openbabel
+  ob3 = True
 import numpy as np
 import math
 from ase import Atom, Atoms
@@ -49,8 +51,9 @@ def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds, printdih, igno
         chargesLabel[line.split()[0]] = float(line.split()[1])
 
   # set openbabel file format
+  base, ext = os.path.splitext(fname)
   obConversion = openbabel.OBConversion()
-  obConversion.SetInAndOutFormats("pdb","xyz")
+  obConversion.SetInAndOutFormats(ext[1:],"xyz")
   # trick to disable ring perception and make the ReadFile waaaay faster
   # Source: https://sourceforge.net/p/openbabel/mailman/openbabel-discuss/thread/56e1812d-396a-db7c-096d-d378a077853f%40ipcms.unistra.fr/#msg36225392
   obConversion.AddOption("b", openbabel.OBConversion.INOPTIONS) 
@@ -91,12 +94,27 @@ def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds, printdih, igno
 
   # get atomic labels from pdb
   idToAtomicLabel = {}
-  for res in openbabel.OBResidueIter(mol):
-    for atom in openbabel.OBResidueAtomIter(res):
+  if ext[1:] == "pdb":
+    for res in openbabel.OBResidueIter(mol):
+      for atom in openbabel.OBResidueAtomIter(res):
+        if (atomIdToMol[atom.GetId()] > 1) and (len(mTypes) > 1):
+          idToAtomicLabel[atom.GetId()] = res.GetAtomID(atom).strip()+str(mapmTypes[atomIdToMol[atom.GetId()]])
+        else:
+          idToAtomicLabel[atom.GetId()] = res.GetAtomID(atom).strip()
+  else:
+    if not ob3:
+      etab = openbabel.OBElementTable()
+    for atom in openbabel.OBMolAtomIter(mol):
       if (atomIdToMol[atom.GetId()] > 1) and (len(mTypes) > 1):
-        idToAtomicLabel[atom.GetId()] = res.GetAtomID(atom).strip()+str(mapmTypes[atomIdToMol[atom.GetId()]])
+        if ob3:
+          idToAtomicLabel[atom.GetId()] = openbabel.GetSymbol(atom.GetAtomicNum())+str(mapmTypes[atomIdToMol[atom.GetId()]])
+        else:
+          idToAtomicLabel[atom.GetId()] = etab.GetSymbol(atom.GetAtomicNum())+str(mapmTypes[atomIdToMol[atom.GetId()]])
       else:
-        idToAtomicLabel[atom.GetId()] = res.GetAtomID(atom).strip()
+        if ob3:
+          idToAtomicLabel[atom.GetId()] = openbabel.GetSymbol(atom.GetAtomicNum())
+        else:
+          idToAtomicLabel[atom.GetId()] = etab.GetSymbol(atom.GetAtomicNum())
 
   # print(idToAtomicLabel)
 
@@ -549,7 +567,7 @@ def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds, printdih, igno
 
 if __name__ == '__main__':
   parser = argparse.ArgumentParser(description="Receives a .pdb and generate a LAMMPS data file with atoms, bonds, angles, dihedrals and impropers. Bonds across PBCs can be detected if the appropriate flag is used.")
-  parser.add_argument("pdbfile", type=extant_file, help="path to the .pdb file")
+  parser.add_argument("pdbfile", type=extant_file, help="path to a .pdb or structure file supported by OpenBabel")
   parser.add_argument("--charges", type=extant_file, help="path to a file associating PDB label to atomic charge (one pair per line)")
   parser.add_argument("--axis", default="z", help="axis to replicate and check for bonds and angles in the PBC (default: z)")
   parser.add_argument("--buffer-length-axis", type=float, help="length of the extra space in the replicated axis for PBC (default: 0.0 - NOT considered for non orthogonal cell)", default=0.)
@@ -561,11 +579,13 @@ if __name__ == '__main__':
 
   args = parser.parse_args()
 
+  obabel_sup = ["acr", "adf", "adfout", "alc", "arc", "bgf", "box", "bs", "c3d1", "c3d2", "cac", "caccrt", "cache", "cacint", "can", "car", "ccc", "cdx", "cdxml", "cht", "cif", "ck", "cml", "cmlr", "com", "copy", "crk2d", "crk3d", "csr", "cssr", "ct", "cub", "cube", "dmol", "dx", "ent", "fa", "fasta", "fch", "fchk", "fck", "feat", "fh", "fix", "fpt", "fract", "fs", "fsa", "g03", "g92", "g94", "g98", "gal", "gam", "gamin", "gamout", "gau", "gjc", "gjf", "gpr", "gr96", "gukin", "gukout", "gzmat", "hin", "inchi", "inp", "ins", "jin", "jout", "mcdl", "mcif", "mdl", "ml2", "mmcif", "mmd", "mmod", "mol", "mol2", "molden", "molreport", "moo", "mop", "mopcrt", "mopin", "mopout", "mpc", "mpd", "mpqc", "mpqcin", "msi", "msms", "nw", "nwo", "outmol", "pc", "pcm", "pdb", "png", "pov", "pqr", "pqs", "prep", "qcin", "qcout", "report", "res", "rsmi", "rxn", "sd", "sdf", "smi", "smiles", "sy2", "t41", "tdd", "test", "therm", "tmol", "txt", "txyz", "unixyz", "vmol", "xed", "xml", "xyz", "yob", "zin"]
+
   # get basename and file extension
   base, ext = os.path.splitext(args.pdbfile)
 
-  if ext[1:] != "pdb":
-    print("Error: only .pdb files are accepted.")
+  if ext[1:] not in obabel_sup:
+    print("Error: {} files are not accepted by OpenBabel.".format(ext[1:]))
     sys.exit(0)
 
   if args.ignore_dihedrals:
