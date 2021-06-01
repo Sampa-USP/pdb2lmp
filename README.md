@@ -1,5 +1,5 @@
 # pdb2lmp
-Python 3 script to create a LAMMPS topology from a PDB file. 
+Python 3 script to create a LAMMPS topology from a PDB file, or from [any other file format supported by OpenBabel](https://open-babel.readthedocs.io/en/latest/FileFormats/Overview.html). 
 
 The highlight of this implementation in comparison with others is that it detects bonds across periodic boundary conditions.
 This may be important in models for solids, surfaces or nanostructures that include bonded terms and are periodic in one or more directions.
