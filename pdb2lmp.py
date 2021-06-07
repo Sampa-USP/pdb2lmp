@@ -511,13 +511,29 @@ def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds, printdih, igno
             outImpropers += "\t%d\t%d\t%d\t%d\t%d\t%d\t# %s\n" % (niDihedrals, idihedralid, a1+1, a2+1, a3+1, a4+1, dstring)
 
   # print header
+  header = "LAMMPS topology created from %s using pdb2lmp.py - By Henrique Musseli Cezar, 2020\n\n" % fname
+  header += "\t%d atoms\n" % natoms
+  if nbonds > 0:
+    header += "\t%d bonds\n" % nbonds
+  if nangles > 0:
+    header += "\t%d angles\n" % nangles
   if printdih and (ndihedrals > 0):
     if ignoreimproper or (niDihedrals == 0):
-      header = "LAMMPS topology created from %s using pdb2lmp.py - By Henrique Musseli Cezar, 2020\n\n\t%d atoms\n\t%d bonds\n\t%d angles\n\t%d dihedrals\n\n\t%d atom types\n\t%d bond types\n\t%d angle types\n\t%d dihedral types\n\n" % (fname, natoms, nbonds, nangles, ndihedrals, nmassTypes, nbondTypes, nangleTypes, ndihedralTypes)
+      header += "\t%d dihedrals\n\n" % ndihedrals
     else:
-      header = "LAMMPS topology created from %s using pdb2lmp.py - By Henrique Musseli Cezar, 2020\n\n\t%d atoms\n\t%d bonds\n\t%d angles\n\t%d dihedrals\n\t%d impropers\n\n\t%d atom types\n\t%d bond types\n\t%d angle types\n\t%d dihedral types\n\t%d improper types\n\n" % (fname, natoms, nbonds, nangles, ndihedrals, niDihedrals, nmassTypes, nbondTypes, nangleTypes, ndihedralTypes, niDihedralTypes)
-  else:
-    header = "LAMMPS topology created from %s using pdb2lmp.py - By Henrique Musseli Cezar, 2020\n\n\t%d atoms\n\t%d bonds\n\t%d angles\n\n\t%d atom types\n\t%d bond types\n\t%d angle types\n\n" % (fname, natoms, nbonds, nangles, nmassTypes, nbondTypes, nangleTypes)
+      header += "\t%d dihedrals\n\t%d impropers\n\n" % (ndihedrals, niDihedrals)
+
+  header += "\n\t%d atom types\n\n" % nmassTypes
+
+  if nbondTypes > 0:
+    header += "\t%d bond types\n" % nbondTypes
+  if nangleTypes > 0:
+    header += "\t%d angle types\n" % nangleTypes
+  if printdih and (ndihedralTypes > 0):
+    if ignoreimproper or (niDihedralTypes == 0):
+      header += "\t%d dihedral types\n" % ndihedralTypes
+    else:
+      header += "\t%d dihedral types\n\t%d improper types\n\n" % (ndihedralTypes, niDihedralTypes)
 
   # add box info
   if fromBounds:
@@ -540,15 +556,17 @@ def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds, printdih, igno
   for i in range(1,nmassTypes+1):
     outCoeffs += "\t%d\teps\tsig\t# %s\n" % (i, mapTypes[i])
 
-  outCoeffs += "\nBond Coeffs\n\n"
+  if nbonds > 0:
+    outCoeffs += "\nBond Coeffs\n\n"
 
-  for i in range(1,nbondTypes+1):
-    outCoeffs += "\t%d\tK\tr_0\t# %s\n" % (i, mapbTypes[i])
+    for i in range(1,nbondTypes+1):
+      outCoeffs += "\t%d\tK\tr_0\t# %s\n" % (i, mapbTypes[i])
 
-  outCoeffs += "\nAngle Coeffs\n\n"
+  if nangles > 0:
+    outCoeffs += "\nAngle Coeffs\n\n"
 
-  for i in range(1,nangleTypes+1):
-    outCoeffs += "\t%d\tK\ttetha_0 (deg)\t# %s\n" %(i, mapaTypes[i])
+    for i in range(1,nangleTypes+1):
+      outCoeffs += "\t%d\tK\ttetha_0 (deg)\t# %s\n" %(i, mapaTypes[i])
 
   if printdih and (ndihedrals > 0):
     outCoeffs += "\nDihedral Coeffs\n\n"
@@ -562,14 +580,18 @@ def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds, printdih, igno
       for i in range(1,niDihedralTypes+1):
         outCoeffs += "\t%d\tK\txi_0 (deg)\t# %s\n" % (i, mapiDTypes[i])
 
-
+  lmpstring = header+"\n"+outMasses+"\n"+outCoeffs+"\n"+outAtoms
+  if nbonds > 0:
+    lmpstring += "\n"+outBonds
+  if nangles > 0:
+    lmpstring += "\n"+outAngles
   if printdih and (ndihedrals > 0):
     if ignoreimproper or (niDihedralTypes == 0):
-      return header+"\n"+outMasses+"\n"+outCoeffs+"\n"+outAtoms+"\n"+outBonds+"\n"+outAngles+"\n"+outDihedrals    
+      lmpstring += "\n"+outDihedrals
     else:
-      return header+"\n"+outMasses+"\n"+outCoeffs+"\n"+outAtoms+"\n"+outBonds+"\n"+outAngles+"\n"+outDihedrals+"\n"+outImpropers    
-  else:
-    return header+"\n"+outMasses+"\n"+outCoeffs+"\n"+outAtoms+"\n"+outBonds+"\n"+outAngles
+      lmpstring += "\n"+outDihedrals+"\n"+outImpropers
+
+  return lmpstring
 
 
 if __name__ == '__main__':
