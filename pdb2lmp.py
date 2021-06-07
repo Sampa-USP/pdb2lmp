@@ -511,7 +511,7 @@ def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds, printdih, igno
             outImpropers += "\t%d\t%d\t%d\t%d\t%d\t%d\t# %s\n" % (niDihedrals, idihedralid, a1+1, a2+1, a3+1, a4+1, dstring)
 
   # print header
-  header = "LAMMPS topology created from %s using pdb2lmp.py - By Henrique Musseli Cezar, 2020\n\n" % fname
+  header = "LAMMPS topology created from %s using pdb2lmp.py - By Henrique Musseli Cezar, 2021\n\n" % fname
   header += "\t%d atoms\n" % natoms
   if nbonds > 0:
     header += "\t%d bonds\n" % nbonds
@@ -523,7 +523,7 @@ def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds, printdih, igno
     else:
       header += "\t%d dihedrals\n\t%d impropers\n\n" % (ndihedrals, niDihedrals)
 
-  header += "\n\t%d atom types\n\n" % nmassTypes
+  header += "\n\t%d atom types\n" % nmassTypes
 
   if nbondTypes > 0:
     header += "\t%d bond types\n" % nbondTypes
@@ -533,7 +533,9 @@ def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds, printdih, igno
     if ignoreimproper or (niDihedralTypes == 0):
       header += "\t%d dihedral types\n" % ndihedralTypes
     else:
-      header += "\t%d dihedral types\n\t%d improper types\n\n" % (ndihedralTypes, niDihedralTypes)
+      header += "\t%d dihedral types\n\t%d improper types\n" % (ndihedralTypes, niDihedralTypes)
+
+  header += "\n"
 
   # add box info
   if fromBounds:
