@@ -36,7 +36,7 @@ def extant_file(x):
     return x
 
 
-def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds, printdih, ignorebonds, ignoreimproper, boxl):
+def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds, printdih, ignorebonds, ignoreimproper, boxl, suppcoeff):
   iaxis = {"x": 0, "y": 1, "z": 2}
   if axis in iaxis:
     repaxis = iaxis[axis]
@@ -582,7 +582,12 @@ def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds, printdih, igno
       for i in range(1,niDihedralTypes+1):
         outCoeffs += "\t%d\tK\txi_0 (deg)\t# %s\n" % (i, mapiDTypes[i])
 
-  lmpstring = header+"\n"+outMasses+"\n"+outCoeffs+"\n"+outAtoms
+  lmpstring = header+"\n"+outMasses+"\n"
+  if not suppcoeff:
+    lmpstring += outCoeffs+"\n"+outAtoms
+  else:
+    lmpstring += outAtoms
+
   if nbonds > 0:
     lmpstring += "\n"+outBonds
   if nangles > 0:
@@ -608,6 +613,7 @@ if __name__ == '__main__':
   parser.add_argument("--ignore-dihedrals", action="store_true", help="does not print info about dihedrdals in the topology")
   parser.add_argument("--ignore-impropers", action="store_true", help="if dihedrals are being printed, you can ignore the impropers with this flag")
   parser.add_argument("--ignore-bonds-solute", action="store_true", help="does not look for bonds angles and dihedrals for the first molecule")
+  parser.add_argument("--supress-coeffs", action="store_true", help="does not print coeffs section to topology")
 
   args = parser.parse_args()
 
@@ -628,6 +634,6 @@ if __name__ == '__main__':
   else:
     printdih = True
 
-  outlmp = parse_mol_info(args.pdbfile, args.charges, args.axis, args.buffer_length_axis, args.buffer_length_orthogonal, args.pbc_bonds, printdih, args.ignore_bonds_solute, args.ignore_impropers, args.box_size)
+  outlmp = parse_mol_info(args.pdbfile, args.charges, args.axis, args.buffer_length_axis, args.buffer_length_orthogonal, args.pbc_bonds, printdih, args.ignore_bonds_solute, args.ignore_impropers, args.box_size, args.supress_coeffs)
 
   print(outlmp)
