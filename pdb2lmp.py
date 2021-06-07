@@ -519,9 +519,9 @@ def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds, printdih, igno
     header += "\t%d angles\n" % nangles
   if printdih and (ndihedrals > 0):
     if ignoreimproper or (niDihedrals == 0):
-      header += "\t%d dihedrals\n\n" % ndihedrals
+      header += "\t%d dihedrals\n" % ndihedrals
     else:
-      header += "\t%d dihedrals\n\t%d impropers\n\n" % (ndihedrals, niDihedrals)
+      header += "\t%d dihedrals\n\t%d impropers\n" % (ndihedrals, niDihedrals)
 
   header += "\n\t%d atom types\n" % nmassTypes
 
