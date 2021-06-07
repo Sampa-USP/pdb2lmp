@@ -36,7 +36,7 @@ def extant_file(x):
     return x
 
 
-def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds, printdih, ignorebonds, ignoreimproper):
+def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds, printdih, ignorebonds, ignoreimproper, boxl):
   iaxis = {"x": 0, "y": 1, "z": 2}
   if axis in iaxis:
     repaxis = iaxis[axis]
@@ -172,27 +172,34 @@ def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds, printdih, igno
         outAtoms += "\t%d\t%d\t%d\tX.XXXXXX\t%.4f\t%.4f\t%.4f\t# %s\n" % (i+1, mnum, massTypes[idToAtomicLabel[i]], atom.GetX(), atom.GetY(), atom.GetZ(), idToAtomicLabel[i])
 
   # define box shape and size
-  try:
+  if boxl:
     fromBounds = False
-    rcell = mol.GetData(12)
-    cell = openbabel.toUnitCell(rcell)
-    v1 = [cell.GetCellVectors()[0].GetX(), cell.GetCellVectors()[0].GetY(), cell.GetCellVectors()[0].GetZ()]
-    v2 = [cell.GetCellVectors()[1].GetX(), cell.GetCellVectors()[1].GetY(), cell.GetCellVectors()[1].GetZ()]
-    v3 = [cell.GetCellVectors()[2].GetX(), cell.GetCellVectors()[2].GetY(), cell.GetCellVectors()[2].GetZ()]
-    boxinfo = [v1,v2,v3]
+    v1 = [boxl[0], 0., 0.]
+    v2 = [0., boxl[1], 0.]
+    v3 = [0., 0., boxl[2]]
     orthogonal = True
-    for i, array in enumerate(boxinfo):
-      for j in range(3):
-        if i == j:
-          continue
-        if not math.isclose(0., array[j], abs_tol=1e-6):
-          orthogonal = False
-  except:
-    fromBounds = True
-    v1 = [xmax - xmin, 0., 0.]
-    v2 = [0., ymax - ymin, 0.]
-    v3 = [0., 0., zmax - zmin]
-    orthogonal = True
+  else:
+    try:
+      fromBounds = False
+      rcell = mol.GetData(12)
+      cell = openbabel.toUnitCell(rcell)
+      v1 = [cell.GetCellVectors()[0].GetX(), cell.GetCellVectors()[0].GetY(), cell.GetCellVectors()[0].GetZ()]
+      v2 = [cell.GetCellVectors()[1].GetX(), cell.GetCellVectors()[1].GetY(), cell.GetCellVectors()[1].GetZ()]
+      v3 = [cell.GetCellVectors()[2].GetX(), cell.GetCellVectors()[2].GetY(), cell.GetCellVectors()[2].GetZ()]
+      boxinfo = [v1,v2,v3]
+      orthogonal = True
+      for i, array in enumerate(boxinfo):
+        for j in range(3):
+          if i == j:
+            continue
+          if not math.isclose(0., array[j], abs_tol=1e-6):
+            orthogonal = False
+    except:
+      fromBounds = True
+      v1 = [xmax - xmin, 0., 0.]
+      v2 = [0., ymax - ymin, 0.]
+      v3 = [0., 0., zmax - zmin]
+      orthogonal = True
 
   # add buffer
   if orthogonal:
@@ -570,6 +577,7 @@ if __name__ == '__main__':
   parser.add_argument("pdbfile", type=extant_file, help="path to a .pdb or structure file supported by OpenBabel")
   parser.add_argument("--charges", type=extant_file, help="path to a file associating PDB label to atomic charge (one pair per line)")
   parser.add_argument("--axis", default="z", help="axis to replicate and check for bonds and angles in the PBC (default: z)")
+  parser.add_argument("--box-size", nargs="+", type=float, help="receives lx, ly and lz of an orthogonal box")
   parser.add_argument("--buffer-length-axis", type=float, help="length of the extra space in the replicated axis for PBC (default: 0.0 - NOT considered for non orthogonal cell)", default=0.)
   parser.add_argument("--buffer-length-orthogonal", type=float, help="length of size orthogonal to the axis with PBC (default: 0.0 - NOT considered for non orthogonal cell)", default=0.)
   parser.add_argument("--pbc-bonds", action="store_true", help="look for bonds and angles in the pbc images?")
@@ -584,16 +592,18 @@ if __name__ == '__main__':
   # get basename and file extension
   base, ext = os.path.splitext(args.pdbfile)
 
+  # check input consistency
+  if (args.box_size) and (len(args.box_size) != 3):
+    sys.exit("Error: wrong number of arguments for --box-size argument. Pass three floats: lx, ly and lz")
+
   if ext[1:] not in obabel_sup:
-    print("Error: {} files are not accepted by OpenBabel.".format(ext[1:]))
-    sys.exit(0)
+    sys.exit("Error: {} files are not accepted by OpenBabel.".format(ext[1:]))
 
   if args.ignore_dihedrals:
     printdih = False
   else:
     printdih = True
 
-  outlmp = parse_mol_info(args.pdbfile, args.charges, args.axis, args.buffer_length_axis, args.buffer_length_orthogonal, args.pbc_bonds, printdih, args.ignore_bonds_solute, args.ignore_impropers)
+  outlmp = parse_mol_info(args.pdbfile, args.charges, args.axis, args.buffer_length_axis, args.buffer_length_orthogonal, args.pbc_bonds, printdih, args.ignore_bonds_solute, args.ignore_impropers, args.box_size)
 
   print(outlmp)
-
