@@ -27,9 +27,10 @@ The basic usage (with default parameters) is just:
 python /path/to/pdb2lmp.py structure.pdb > my_topology.lmp
 ```
 
-The simulation box size is determined by either the CRYST1 line in the PDB file or by automatic detection. You can use the `--buffer-length-axis` and `--buffer-length-orthogonal` options to set an extra buffer to be added in the axial and perpendicular directions, respectively.
+The simulation box size is determined by the CRYST1 line in the PDB file, or the `--box-size` option, or by automatic detection. You can use the `--buffer-length-axis` and `--buffer-length-orthogonal` options to set an extra buffer to be added in the axial and perpendicular directions, respectively.
 
 The `--axis` option can be used when the structure has some kind of axial symmetry, such as in nanotubes.
+You can run the script with the `-h` option to see a help with all the available options.
 
 A simple example of the usage for a box full of water molecules can be seen [here](https://github.com/Sampa-USP/useful-hacks/tree/master/TopoLiquid).
 
