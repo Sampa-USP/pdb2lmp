@@ -267,7 +267,6 @@ def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds, printdih, igno
   mapbTypes = {}
   nbondTypes = 0
   nbonds = 0
-  bondsToDelete = []
   bondIterators = []
   if ignorebonds:
     sepmols = nmol.Separate()
@@ -284,7 +283,6 @@ def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds, printdih, igno
 
       # check if its a bond of the replica only
       if (b1 >= natoms) and (b2 >= natoms):
-        bondsToDelete.append(bond)
         continue
       # remap to a real atom if needed
       if b1 >= natoms:
@@ -314,9 +312,6 @@ def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds, printdih, igno
 
     lastidx = i
 
-  # delete the bonds of atoms from other replicas
-  for bond in bondsToDelete:
-    nmol.DeleteBond(bond)
 
   # identify angle types and create angle list
   angleTypes = {}
