@@ -36,7 +36,7 @@ def extant_file(x):
     return x
 
 
-def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds, printdih, ignorebonds, ignoreimproper, boxl, suppcoeff):
+def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds, printdih, ignorebonds, ignoreimproper, boxl, suppcoeff, labelpdb):
   iaxis = {"x": 0, "y": 1, "z": 2}
   if axis in iaxis:
     repaxis = iaxis[axis]
@@ -94,7 +94,11 @@ def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds, printdih, igno
 
   # get atomic labels from pdb
   idToAtomicLabel = {}
-  if ext[1:] == "pdb":
+  if labelpdb:
+    for res in openbabel.OBResidueIter(mol):
+      for atom in openbabel.OBResidueAtomIter(res):
+        idToAtomicLabel[atom.GetId()] = res.GetAtomID(atom).strip()    
+  elif ext[1:] == "pdb":
     for res in openbabel.OBResidueIter(mol):
       for atom in openbabel.OBResidueAtomIter(res):
         if (atomIdToMol[atom.GetId()] > 1) and (len(mTypes) > 1):
@@ -609,6 +613,7 @@ if __name__ == '__main__':
   parser.add_argument("--ignore-impropers", action="store_true", help="if dihedrals are being printed, you can ignore the impropers with this flag")
   parser.add_argument("--ignore-bonds-solute", action="store_true", help="does not look for bonds angles and dihedrals for the first molecule")
   parser.add_argument("--supress-coeffs", action="store_true", help="does not print coeffs section to topology")
+  parser.add_argument("--atom-labels-pdb", action="store_true", help="get the atom labels from the PDB file")
 
   args = parser.parse_args()
 
@@ -618,6 +623,9 @@ if __name__ == '__main__':
   base, ext = os.path.splitext(args.pdbfile)
 
   # check input consistency
+  if args.atom_labels_pdb and (ext.lower()[1:] != "pdb"):
+    sys.exit("Error: --atoms-labels-pdb only works with PDB files")
+
   if (args.box_size) and (len(args.box_size) != 3):
     sys.exit("Error: wrong number of arguments for --box-size argument. Pass three floats: lx, ly and lz")
 
@@ -629,6 +637,6 @@ if __name__ == '__main__':
   else:
     printdih = True
 
-  outlmp = parse_mol_info(args.pdbfile, args.charges, args.axis, args.buffer_length_axis, args.buffer_length_orthogonal, args.pbc_bonds, printdih, args.ignore_bonds_solute, args.ignore_impropers, args.box_size, args.supress_coeffs)
+  outlmp = parse_mol_info(args.pdbfile, args.charges, args.axis, args.buffer_length_axis, args.buffer_length_orthogonal, args.pbc_bonds, printdih, args.ignore_bonds_solute, args.ignore_impropers, args.box_size, args.supress_coeffs, args.atom_labels_pdb)
 
   print(outlmp)
