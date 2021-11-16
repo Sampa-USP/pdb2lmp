@@ -20,8 +20,6 @@ except:
   ob3 = True
 import numpy as np
 import math
-from ase import Atom, Atoms
-from ase.io import write
 from scipy.spatial import cKDTree
 
 # from https://stackoverflow.com/a/11541495
@@ -61,6 +59,8 @@ def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds, printdih, igno
   # read molecule to OBMol object
   mol = openbabel.OBMol()
   obConversion.ReadFile(mol, fname)
+  if pbcbonds:
+    mol.SetFlag(openbabel.OB_PERIODIC_MOL)
   mol.ConnectTheDots() # necessary because of the 'b' INOPTION
 
   # split the molecules
@@ -150,14 +150,12 @@ def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds, printdih, igno
   zmin = float("inf")
   zmax = float("-inf")
   natoms = 0
-  acoords = []
   for mnum, imol in enumerate(molecules, start=1):
     atomIterator = openbabel.OBMolAtomIter(imol)
     for atom in sorted(atomIterator, key=lambda x: x.GetId()):
       natoms += 1
       i = atom.GetId()
       apos = (atom.GetX(), atom.GetY(), atom.GetZ())
-      acoords.append(Atom(atom.GetAtomicNum(), apos))
 
       # look for the maximum and minimum x for the box (improve later with numpy and all coordinates)
       if apos[0] > xmax:
@@ -231,42 +229,6 @@ def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds, printdih, igno
 
   # print(boxinfo)
 
-  # Duplicate to get the bonds in the PBC. Taken from (method _crd2bond):
-  # https://github.com/tongzhugroup/mddatasetbuilder/blob/66eb0f15e972be0f5534dcda27af253cd8891ff2/mddatasetbuilder/detect.py#L213
-  if pbcbonds:
-    acoords = Atoms(acoords, cell=boxinfo, pbc=True)
-    repatoms = acoords.repeat(2)[natoms:] # repeat the unit cell in each direction (len(repatoms) = 7*natoms)
-    tree = cKDTree(acoords.get_positions())
-    d = tree.query(repatoms.get_positions(), k=1)[0]
-    nearest = d < 8.
-    ghost_atoms = repatoms[nearest]
-    realnumber = np.where(nearest)[0] % natoms
-    acoords += ghost_atoms
-
-    write("replicated.xyz", acoords) # write the structure with the replicated atoms
-
-    # write new mol with new bonds
-    nmol = openbabel.OBMol()
-    nmol.BeginModify()
-    for idx, (num, position) in enumerate(zip(acoords.get_atomic_numbers(), acoords.positions)):
-        a = nmol.NewAtom(idx)
-        a.SetAtomicNum(int(num))
-        a.SetVector(*position)
-    nmol.ConnectTheDots()
-    # nmol.PerceiveBondOrders() # super slow becauses it looks for rings
-    nmol.EndModify()
-  else:
-    acoords = Atoms(acoords, cell=boxinfo, pbc=False)
-    nmol = openbabel.OBMol()
-    nmol.BeginModify()
-    for idx, (num, position) in enumerate(zip(acoords.get_atomic_numbers(), acoords.positions)):
-        a = nmol.NewAtom(idx)
-        a.SetAtomicNum(int(num))
-        a.SetVector(*position)
-    nmol.ConnectTheDots()
-    # nmol.PerceiveBondOrders() # super slow becauses it looks for rings
-    nmol.EndModify()
-
   # identify bond types and create bond list
   outBonds = "Bonds # harmonic\n\n"
 
@@ -276,26 +238,17 @@ def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds, printdih, igno
   nbonds = 0
   bondIterators = []
   if ignorebonds:
-    sepmols = nmol.Separate()
+    sepmols = mol.Separate()
     for smol in sepmols[1:]:
       bondIterators.append(openbabel.OBMolBondIter(smol))
   else:
-    bondIterators.append(openbabel.OBMolBondIter(nmol))
+    bondIterators.append(openbabel.OBMolBondIter(mol))
 
   lastidx = 1
   for iterator in bondIterators:
     for i, bond in enumerate(iterator, lastidx):
       b1 = bond.GetBeginAtom().GetId()    
       b2 = bond.GetEndAtom().GetId()
-
-      # check if its a bond of the replica only
-      if (b1 >= natoms) and (b2 >= natoms):
-        continue
-      # remap to a real atom if needed
-      if b1 >= natoms:
-        b1 = realnumber[b1-natoms]
-      if b2 >= natoms:
-        b2 = realnumber[b2-natoms]
 
       # identify bond type
       btype1 = "%s - %s" % (idToAtomicLabel[b1],idToAtomicLabel[b2])
@@ -319,7 +272,6 @@ def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds, printdih, igno
 
     lastidx = i
 
-
   # identify angle types and create angle list
   angleTypes = {}
   mapaTypes = {}
@@ -328,14 +280,14 @@ def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds, printdih, igno
   angleIterators = []
 
   if ignorebonds:
-    sepmols = nmol.Separate()
+    sepmols = mol.Separate()
     for smol in sepmols[1:]:
       smol.FindAngles()
       angleIterators.append(openbabel.OBMolAngleIter(smol))
     prevnumatoms = sepmols[0].NumAtoms()
   else:
-    nmol.FindAngles()
-    angleIterators.append(openbabel.OBMolAngleIter(nmol))
+    mol.FindAngles()
+    angleIterators.append(openbabel.OBMolAngleIter(mol))
   
   outAngles = "Angles # harmonic\n\n"
 
@@ -350,14 +302,6 @@ def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds, printdih, igno
         a1 = angle[1]
         a2 = angle[0]
         a3 = angle[2]
-
-      # remap to a real atom if needed
-      if a1 >= natoms:
-        a1 = realnumber[a1-natoms]
-      if a2 >= natoms:
-        a2 = realnumber[a2-natoms]
-      if a3 >= natoms:
-        a3 = realnumber[a3-natoms]
 
       atype1 = "%s - %s - %s" % (idToAtomicLabel[a1],idToAtomicLabel[a2],idToAtomicLabel[a3])
       atype2 = "%s - %s - %s" % (idToAtomicLabel[a3],idToAtomicLabel[a2],idToAtomicLabel[a1])
@@ -391,13 +335,13 @@ def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds, printdih, igno
     dihedralIterators = []
 
     if ignorebonds:
-      sepmols = nmol.Separate()
+      sepmols = mol.Separate()
       for smol in sepmols[1:]:
         smol.FindTorsions()
         dihedralIterators.append(openbabel.OBMolTorsionIter(smol))
     else:
-      nmol.FindTorsions()
-      dihedralIterators.append(openbabel.OBMolTorsionIter(nmol))
+      mol.FindTorsions()
+      dihedralIterators.append(openbabel.OBMolTorsionIter(mol))
 
     outDihedrals = "Dihedrals # charmmfsw\n\n"
 
@@ -408,16 +352,6 @@ def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds, printdih, igno
         a2 = dihedral[1]
         a3 = dihedral[2]
         a4 = dihedral[3]
-
-        # remap to a real atom if needed
-        if a1 >= natoms:
-          a1 = realnumber[a1-natoms]
-        if a2 >= natoms:
-          a2 = realnumber[a2-natoms]
-        if a3 >= natoms:
-          a3 = realnumber[a3-natoms]
-        if a4 >= natoms:
-          a4 = realnumber[a4-natoms]
 
         dtype1 = "%s - %s - %s - %s" % (idToAtomicLabel[a1],idToAtomicLabel[a2],idToAtomicLabel[a3],idToAtomicLabel[a4])
         dtype2 = "%s - %s - %s - %s" % (idToAtomicLabel[a4],idToAtomicLabel[a3],idToAtomicLabel[a2],idToAtomicLabel[a1])
@@ -449,13 +383,13 @@ def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds, printdih, igno
       mollist = []
 
       if ignorebonds:
-        sepmols = nmol.Separate()
+        sepmols = mol.Separate()
         for smol in sepmols[1:]:
           smol.PerceiveBondOrders()
           mollist.append(smol)
       else:
-        nmol.PerceiveBondOrders()
-        mollist.append(nmol)
+        mol.PerceiveBondOrders()
+        mollist.append(mol)
 
       outImpropers = "Impropers # harmonic\n\n"
 
@@ -482,16 +416,6 @@ def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds, printdih, igno
             a2 = torsional[1]-1
             a3 = torsional[2]-1
             a4 = torsional[3]-1
-
-            # remap to a real atom if needed
-            if a1 >= natoms:
-              a1 = realnumber[a1-natoms]
-            if a2 >= natoms:
-              a2 = realnumber[a2-natoms]
-            if a3 >= natoms:
-              a3 = realnumber[a3-natoms]
-            if a4 >= natoms:
-              a4 = realnumber[a4-natoms]
 
             dtype1 = "%s - %s - %s - %s" % (idToAtomicLabel[a1],idToAtomicLabel[a2],idToAtomicLabel[a3],idToAtomicLabel[a4])
             dtype2 = "%s - %s - %s - %s" % (idToAtomicLabel[a4],idToAtomicLabel[a3],idToAtomicLabel[a2],idToAtomicLabel[a1])
