@@ -20,7 +20,6 @@ except:
   ob3 = True
 import numpy as np
 import math
-from scipy.spatial import cKDTree
 
 # from https://stackoverflow.com/a/11541495
 def extant_file(x):
