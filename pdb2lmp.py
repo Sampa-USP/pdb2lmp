@@ -225,6 +225,18 @@ def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds, printdih, igno
         else:
           buf.append(val)
       boxinfo[i] = buf
+    
+    # set mol unitcell
+    cell = openbabel.OBUnitCell()
+    cell.SetData(boxinfo[0][0], boxinfo[1][1], boxinfo[2][2], 90.0, 90.0, 90.0)
+    # remove old info
+    if mol.HasData(12):
+      mol.DeleteData(12)
+    for bond in openbabel.OBMolBondIter(mol):
+      mol.DeleteBond(bond)
+    # set new cell and create the bonds
+    mol.CloneData(cell)
+    mol.ConnectTheDots()
 
   # print(boxinfo)
 
