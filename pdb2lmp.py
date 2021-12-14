@@ -54,6 +54,7 @@ def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds, printdih, igno
   # trick to disable ring perception and make the ReadFile waaaay faster
   # Source: https://sourceforge.net/p/openbabel/mailman/openbabel-discuss/thread/56e1812d-396a-db7c-096d-d378a077853f%40ipcms.unistra.fr/#msg36225392
   obConversion.AddOption("b", openbabel.OBConversion.INOPTIONS) 
+  obConversion.AddOption("c", openbabel.OBConversion.INOPTIONS) # ignore the CONECTs for a faster processing
 
   # read molecule to OBMol object
   mol = openbabel.OBMol()
