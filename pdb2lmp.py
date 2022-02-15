@@ -20,6 +20,7 @@ except:
   ob3 = True
 import numpy as np
 import math
+import itertools
 
 # from https://stackoverflow.com/a/11541495
 def extant_file(x):
@@ -33,7 +34,7 @@ def extant_file(x):
     return x
 
 
-def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds, printdih, ignorebonds, ignoreimproper, boxl, suppcoeff, labelpdb, notsplit):
+def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds, printdih, ignorebonds, ignoreimproper, boxl, suppcoeff, labelpdb, notsplit, extraimp):
   iaxis = {"x": 0, "y": 1, "z": 2}
   if axis in iaxis:
     repaxis = iaxis[axis]
@@ -412,11 +413,18 @@ def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds, printdih, igno
             # print(atom.GetHyb(), atom.GetAtomicNum(), atom.GetValence())
             expDegree = atom.GetValence()
           except:
-            # print(atom.GetHyb(), atom.GetAtomicNum(), atom.GetExplicitDegree())
+            # print(atom.GetId()+1, atom.GetHyb(), atom.GetAtomicNum(), atom.GetExplicitDegree(), atom.GetExplicitValence(), atom.GetHvyDegree(), atom.GetHeteroDegree())
             expDegree = atom.GetExplicitDegree()
 
           # returns impropers for atoms with connected to other 3 atoms and SP2 hybridization
           if atom.GetHyb() == 2 and expDegree == 3:
+            impAtom = True
+          elif extraimp and (atom.GetAtomicNum() == 6 and expDegree == 3):
+            impAtom = True
+          else:
+            impAtom = False
+
+          if impAtom:
             connectedAtoms = []
             for atom2, depth in openbabel.OBMolAtomBFSIter(imol, atom.GetId()+1):
               if depth == 2:
@@ -429,21 +437,24 @@ def parse_mol_info(fname, fcharges, axis, buffa, buffo, pbcbonds, printdih, igno
             a3 = torsional[2]-1
             a4 = torsional[3]-1
 
-            dtype1 = "%s - %s - %s - %s" % (idToAtomicLabel[a1],idToAtomicLabel[a2],idToAtomicLabel[a3],idToAtomicLabel[a4])
-            dtype2 = "%s - %s - %s - %s" % (idToAtomicLabel[a4],idToAtomicLabel[a3],idToAtomicLabel[a2],idToAtomicLabel[a1])
+            alldtypes = []
+            for perm in itertools.permutations([idToAtomicLabel[a2], idToAtomicLabel[a3], idToAtomicLabel[a4]]):
+              alldtypes.append("%s - %s - %s - %s" % (idToAtomicLabel[a1], perm[0], perm[1], perm[2]))
 
-            if dtype1 in improperDihedralTypes:
-              idihedralid = improperDihedralTypes[dtype1]
-              dstring = dtype1
-            elif dtype2 in improperDihedralTypes:
-              idihedralid = improperDihedralTypes[dtype2]
-              dstring = dtype2
-            else:
+            founddtype = False
+            for dtype in alldtypes:
+              if dtype in improperDihedralTypes:
+                idihedralid = improperDihedralTypes[dtype]
+                dstring = dtype
+                founddtype = True
+                break
+
+            if not founddtype:
               niDihedralTypes += 1
-              mapiDTypes[niDihedralTypes] = dtype1
+              mapiDTypes[niDihedralTypes] = alldtypes[0]
               idihedralid = niDihedralTypes
-              improperDihedralTypes[dtype1] = niDihedralTypes
-              dstring = dtype1
+              improperDihedralTypes[alldtypes[0]] = niDihedralTypes
+              dstring = alldtypes[0]
 
             niDihedrals += 1
             outImpropers += "\t%d\t%d\t%d\t%d\t%d\t%d\t# %s\n" % (niDihedrals, idihedralid, a1+1, a2+1, a3+1, a4+1, dstring)
@@ -554,6 +565,7 @@ if __name__ == '__main__':
   parser.add_argument("--supress-coeffs", action="store_true", help="does not print coeffs section to topology")
   parser.add_argument("--atom-labels-pdb", action="store_true", help="get the atom labels from the PDB file")
   parser.add_argument("--do-not-split-molecules", action="store_true", help="use this option if running for a single framework that may be interpreted as multiple molecules by OpenBabel")
+  parser.add_argument("--extra-impropers", action="store_true", help="search for additional improper dihedrals (namely, SP3 carbons with degree 3)")
 
   args = parser.parse_args()
 
@@ -577,6 +589,6 @@ if __name__ == '__main__':
   else:
     printdih = True
 
-  outlmp = parse_mol_info(args.pdbfile, args.charges, args.axis, args.buffer_length_axis, args.buffer_length_orthogonal, args.pbc_bonds, printdih, args.ignore_bonds_solute, args.ignore_impropers, args.box_size, args.supress_coeffs, args.atom_labels_pdb, args.do_not_split_molecules)
+  outlmp = parse_mol_info(args.pdbfile, args.charges, args.axis, args.buffer_length_axis, args.buffer_length_orthogonal, args.pbc_bonds, printdih, args.ignore_bonds_solute, args.ignore_impropers, args.box_size, args.supress_coeffs, args.atom_labels_pdb, args.do_not_split_molecules, args.extra_impropers)
 
   print(outlmp)
